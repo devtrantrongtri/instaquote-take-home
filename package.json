@@ -10,7 +10,9 @@
     "test:reader": "node --import tsx --test tests/reader.test.ts",
     "verify:reader": "node --import tsx scripts/verify-reader.ts",
     "test:parser": "node --import tsx --test tests/extraction.test.ts",
-    "verify:candidates": "node --import tsx scripts/verify-candidates.ts"
+    "verify:candidates": "node --import tsx scripts/verify-candidates.ts",
+    "test:validation": "node --import tsx --test tests/validation.test.ts",
+    "verify:extraction": "node --import tsx scripts/verify-extraction.ts"
   },
   "engines": {
     "node": ">=22.13.0"

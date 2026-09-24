@@ -1,6 +1,7 @@
 # instaquote-take-home
 
-**Tasks 1–3: shell, contracts, PDF reader and deterministic candidates.** The reader and two supported table layouts are checked against all six samples. Candidate rows retain raw evidence, column mapping and context; they are not validated final results. Business validation, the upload API and results UI are not implemented. See [CANDIDATE_EXTRACTION.md](CANDIDATE_EXTRACTION.md) for parser results and limitations. No OCR/VLM or runtime AI integration is present. See [READER_SPIKE.md](READER_SPIKE.md) for reader results and runtime findings.
+**Tasks 1–4: shell, contracts, reader, candidate extraction and validation.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload API and results UI remain unimplemented. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
+
 
 ## Overview
 
@@ -43,31 +44,31 @@ The calculations above are review findings, not application output. Full row dat
 
 ## Intended Result Contract
 
-The types are defined in [lib/contracts.ts](lib/contracts.ts); runtime validation and processing are not implemented. `ExtractionResult` has `items`, `refusals` and `issues`. Items carry shared, non-empty evidence and optional source context. Numeric fields use `{ value, raw }`, with a decimal string value and the original source token. `lineTotal` is optional. Refusals explain what could not be extracted; issues distinguish source warnings from recoverable page errors. Fatal request failures use the separate `ApiError` type. Optional absent fields do not automatically generate refusals.
+The types are defined in [lib/contracts.ts](lib/contracts.ts); runtime evidence validation and document aggregation are implemented. `ExtractionResult` has `items`, `refusals` and `issues`. Items carry shared, non-empty evidence and optional source context. Numeric fields use `{ value, raw }`, with a decimal string value and the original source token. `lineTotal` is optional. Refusals explain what could not be extracted; issues distinguish source warnings from recoverable page errors. Fatal request failures use the separate `ApiError` type. Optional absent fields do not automatically generate refusals.
 
-TypeScript cannot prove that a quote supports a number, that a page exists, or that a decimal string is valid. Those checks remain planned validation work; the current contracts do not enforce them at runtime.
+TypeScript cannot prove that a quote supports a number, that a page exists, or that a decimal string is valid. The validation layer checks source associations and numeric tokens at runtime; the type declarations alone do not enforce them.
 
 Acceptance means the value is supported by the source. It does not mean the document is internally consistent: a printed total may be preserved with a mismatch warning. A partial result must identify the unread or unresolved portion.
 
 ## Key Engineering Decisions
 
-Current direction; the shell, contracts, page reader and candidate parser are implemented:
+Current direction; the shell, contracts, page reader, candidate parser and validation service are implemented:
 
-- One Next.js + TypeScript app is set up. The planned server endpoint and validation remain unimplemented; no separate backend or tRPC layer is added.
+- One Next.js + TypeScript app is set up. The planned upload endpoint remains unimplemented; no separate backend or tRPC layer is added.
 
 - Validate candidate structure, evidence and business meaning independently of how candidates are generated.
 - Use arithmetic for internal consistency checks; do not fill missing extracted values.
 - Keep page and document context, especially for returns and credits. Do not infer signs, net quantities or duplicate relationships.
-- Use page-by-page text reading and deterministic extraction for supported layouts in V1. Unreadable pages and unsupported table content must not silently become empty success. The reader uses pdfjs-dist 6.3.289; candidate parsing reports unsupported tables/rows internally; final refusal mapping remains unimplemented.
+- Use page-by-page text reading and deterministic extraction for supported layouts in V1. Unreadable pages and unsupported table content must not silently become empty success. The reader uses pdfjs-dist 6.3.289; candidate parsing reports unsupported tables/rows internally; validation maps these diagnostics to scoped refusals.
 - Defer OCR/VLM to a later version unless the core submission is complete and the fallback can be verified. No runtime LLM is planned for V1.
 
 ## Testing Focus
 
-Planned tests focus on refusing inferred totals, surfacing conflicting claims while preserving unrelated items, validating evidence and containing page failures. An integration check should verify that a specific refusal reason survives the service/API/UI path. A clean document should also be accepted without unnecessary refusal.
+Tests cover refusing inferred totals, surfacing conflicting claims while preserving unrelated items, validating evidence and containing page failures. A future integration check must verify that a specific refusal reason survives the service/API/UI path. A clean document should also be accepted without unnecessary refusal.
 
 ## Known Limitations / Uncertainties
 
-The reader returns `no_usable_text` for KBS-10241 and page 4 of KBS-DR118, preserving the other readable pages. Domain refusal mapping and user-facing display are not implemented. A page containing some text is not proof that all of its content or tables were read. Visual inspection of the image pages does not establish working OCR. The specification does not define a complete field schema or a verification standard for OCR transcriptions.
+The reader returns `no_usable_text` for KBS-10241 and page 4 of KBS-DR118, preserving the other readable pages. Page-scoped refusals now represent those reader limitations; user-facing display is not implemented. A page containing some text is not proof that all of its content or tables were read. Visual inspection of the image pages does not establish working OCR. The specification does not define a complete field schema or a verification standard for OCR transcriptions.
 
 The documents do not resolve the ambiguous weight scopes, pallet discrepancy, total mismatch or accounting relationships among KBS-DR118's later pages. Its “Signed Acceptance” heading alone is not evidence of an actual signature. These limits should remain explicit rather than being filled with assumptions.
 
@@ -79,7 +80,7 @@ The documents do not resolve the ambiguous weight scopes, pallet discrepancy, to
 
 ### 2. Where are you not confident?
 
-At this stage, reliable numeric transcription and evidence verification on image-only pages remain untested. The unresolved document meanings listed above cannot be settled from the supplied sources. The deterministic parser passes the supplied text samples and focused geometry/coverage tests, but fragmented headers, wrapping and hybrid image/text tables remain coverage risks. Candidates are not yet independently validated. This answer must be updated with observed implementation limitations.
+At this stage, reliable numeric transcription and evidence verification on image-only pages remain untested. The unresolved document meanings listed above cannot be settled from the supplied sources. The deterministic parser passes the supplied text samples and focused geometry/coverage tests, but fragmented headers, wrapping and hybrid image/text tables remain coverage risks. Candidates are independently checked against source fragments before acceptance, within those supported layouts. This answer must be updated with observed implementation limitations.
 
 ### 3. What would you do with three more days?
 
@@ -109,7 +110,7 @@ npm start
 
 Dependency versions are pinned in `package.json` and `package-lock.json`.
 
-The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. This does not establish line-item extraction support.
+The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; HTTP integration remains future work.
 
 `npm run typecheck` generates Next.js types before running TypeScript, so it does not require a previous build. `next-env.d.ts` is generated and ignored. Next.js also generated `AGENTS.md` and `CLAUDE.md` with local framework guidance.
 
@@ -122,6 +123,8 @@ npm run test:reader
 npm run verify:reader
 npm run test:parser
 npm run verify:candidates
+npm run test:validation
+npm run verify:extraction
 ```
 
 The eight tests cover the six samples, page numbering, no-text states, invalid/corrupt input, and synthetic page-local failures. Verification prints actual page states; pass an output directory to save raw text/fragments for inspection:
@@ -130,4 +133,4 @@ The eight tests cover the six samples, page numbering, no-text states, invalid/c
 npm run verify:reader -- /tmp/insta-quote-reader-output
 ```
 
-The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. Business refusal, final evidence validation, API and UI tests remain future work in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Typecheck/build success alone does not prove extraction or evidence correctness.
+The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. API and UI tests remain future work in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Typecheck/build success alone does not prove extraction or evidence correctness.
