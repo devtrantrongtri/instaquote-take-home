@@ -14,7 +14,8 @@
     "test:validation": "node --import tsx --test tests/validation.test.ts",
     "verify:extraction": "node --import tsx scripts/verify-extraction.ts",
     "test:api": "node --import tsx --test tests/api.test.ts",
-    "test:api:http": "node --import tsx --test tests/api-http.test.ts"
+    "test:api:http": "node --import tsx --test tests/api-http.test.ts",
+    "test:ui": "node --import tsx --test tests/ui.test.tsx"
   },
   "engines": {
     "node": ">=22.13.0"

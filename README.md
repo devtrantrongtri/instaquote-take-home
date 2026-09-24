@@ -1,6 +1,6 @@
 # instaquote-take-home
 
-**Tasks 1–5: extraction service and upload API.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload API is implemented; the frontend remains a placeholder. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
+**Tasks 1–6: extraction service, upload API and results page.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload page displays items, expandable source evidence, refusals, warnings and partial results. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
 
 
 ## Overview
@@ -64,11 +64,11 @@ Current direction; the shell, contracts, page reader, candidate parser and valid
 
 ## Testing Focus
 
-Tests cover refusing inferred totals, surfacing conflicting claims while preserving unrelated items, validating evidence and containing page failures. A future integration check must verify that a specific refusal reason survives the service/API/UI path. A clean document should also be accepted without unnecessary refusal.
+Tests cover refusing inferred totals, surfacing conflicting claims while preserving unrelated items, validating evidence and containing page failures. Component tests and browser checks verify that refusal reasons survive the service/API/UI path. A clean document should also be accepted without unnecessary refusal.
 
 ## Known Limitations / Uncertainties
 
-The reader returns `no_usable_text` for KBS-10241 and page 4 of KBS-DR118, preserving the other readable pages. Page-scoped refusals now represent those reader limitations; user-facing display is not implemented. A page containing some text is not proof that all of its content or tables were read. Visual inspection of the image pages does not establish working OCR. The specification does not define a complete field schema or a verification standard for OCR transcriptions.
+The reader returns `no_usable_text` for KBS-10241 and page 4 of KBS-DR118, preserving the other readable pages. The page displays these scoped refusals alongside any readable items, with a visible partial-result indication. A page containing some text is not proof that all of its content or tables were read. Visual inspection of the image pages does not establish working OCR. The specification does not define a complete field schema or a verification standard for OCR transcriptions.
 
 The documents do not resolve the ambiguous weight scopes, pallet discrepancy, total mismatch or accounting relationships among KBS-DR118's later pages. Its “Signed Acceptance” heading alone is not evidence of an actual signature. These limits should remain explicit rather than being filled with assumptions.
 
@@ -100,7 +100,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000 to view the placeholder shell. The frontend upload/results flow is not implemented yet; use the API below.
+Open http://localhost:3000, choose a PDF, then select **Extract items**. The form is disabled while reading and validating. Review the result summary, grouped page/context tables, separate Refusals and Issues sections, and **View source evidence** details. Selecting a new file clears the old result; fatal upload errors display the API reason.
 
 ```sh
 npm run typecheck
@@ -110,7 +110,7 @@ npm start
 
 Dependency versions are pinned in `package.json` and `package-lock.json`.
 
-The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; Actual HTTP uploads are tested against Next dev and production start.
+The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; actual HTTP uploads are tested against Next dev and production start.
 
 `npm run typecheck` generates Next.js types before running TypeScript, so it does not require a previous build. `next-env.d.ts` is generated and ignored. Next.js also generated `AGENTS.md` and `CLAUDE.md` with local framework guidance.
 
@@ -126,6 +126,7 @@ npm run verify:candidates
 npm run test:validation
 npm run verify:extraction
 npm run test:api
+npm run test:ui
 ```
 
 The eight tests cover the six samples, page numbering, no-text states, invalid/corrupt input, and synthetic page-local failures. Verification prints actual page states; pass an output directory to save raw text/fragments for inspection:
@@ -134,7 +135,7 @@ The eight tests cover the six samples, page numbering, no-text states, invalid/c
 npm run verify:reader -- /tmp/insta-quote-reader-output
 ```
 
-The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. The 20 API tests cover multipart inputs, serialization and safe error mapping. Nine HTTP tests exercise all six samples plus missing/non-PDF/corrupt uploads against a running Next server. UI tests remain future work. Typecheck/build success alone does not prove extraction or evidence correctness.
+The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. The 20 API tests cover multipart inputs, serialization and safe error mapping. Nine HTTP tests exercise all six samples plus missing/non-PDF/corrupt uploads against a running Next server. The 18 UI tests cover rendering, evidence, partial/error states and transport handling. All six PDFs were uploaded through the production browser UI; loading/disabled behavior, fatal errors and a narrow viewport were checked. See [UI_ACCEPTANCE.md](UI_ACCEPTANCE.md). Typecheck/build success alone does not prove extraction or evidence correctness.
 
 ## Extraction API
 
