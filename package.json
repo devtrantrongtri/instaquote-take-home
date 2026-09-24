@@ -8,7 +8,9 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "test:reader": "node --import tsx --test tests/reader.test.ts",
-    "verify:reader": "node --import tsx scripts/verify-reader.ts"
+    "verify:reader": "node --import tsx scripts/verify-reader.ts",
+    "test:parser": "node --import tsx --test tests/extraction.test.ts",
+    "verify:candidates": "node --import tsx scripts/verify-candidates.ts"
   },
   "engines": {
     "node": ">=22.13.0"

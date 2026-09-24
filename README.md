@@ -1,6 +1,6 @@
 # instaquote-take-home
 
-**Tasks 1–2: shell, contracts and PDF reader spike.** A page-by-page Node text reader is implemented and checked against all six samples. Line-item parsing, business validation, the upload API and results UI are not implemented. No OCR/VLM or runtime AI integration is present. See [READER_SPIKE.md](READER_SPIKE.md) for reader results and runtime findings.
+**Tasks 1–3: shell, contracts, PDF reader and deterministic candidates.** The reader and two supported table layouts are checked against all six samples. Candidate rows retain raw evidence, column mapping and context; they are not validated final results. Business validation, the upload API and results UI are not implemented. See [CANDIDATE_EXTRACTION.md](CANDIDATE_EXTRACTION.md) for parser results and limitations. No OCR/VLM or runtime AI integration is present. See [READER_SPIKE.md](READER_SPIKE.md) for reader results and runtime findings.
 
 ## Overview
 
@@ -51,14 +51,14 @@ Acceptance means the value is supported by the source. It does not mean the docu
 
 ## Key Engineering Decisions
 
-Current direction; only the shell, contracts and page text reader are implemented:
+Current direction; the shell, contracts, page reader and candidate parser are implemented:
 
 - One Next.js + TypeScript app is set up. The planned server endpoint and validation remain unimplemented; no separate backend or tRPC layer is added.
 
 - Validate candidate structure, evidence and business meaning independently of how candidates are generated.
 - Use arithmetic for internal consistency checks; do not fill missing extracted values.
 - Keep page and document context, especially for returns and credits. Do not infer signs, net quantities or duplicate relationships.
-- Use page-by-page text reading and deterministic extraction for supported layouts in V1. Unreadable pages and unsupported table content must not silently become empty success. The reader uses pdfjs-dist 6.3.289; table parsing and coverage checks remain unimplemented.
+- Use page-by-page text reading and deterministic extraction for supported layouts in V1. Unreadable pages and unsupported table content must not silently become empty success. The reader uses pdfjs-dist 6.3.289; candidate parsing reports unsupported tables/rows internally; final refusal mapping remains unimplemented.
 - Defer OCR/VLM to a later version unless the core submission is complete and the fallback can be verified. No runtime LLM is planned for V1.
 
 ## Testing Focus
@@ -79,7 +79,7 @@ The documents do not resolve the ambiguous weight scopes, pallet discrepancy, to
 
 ### 2. Where are you not confident?
 
-At this stage, reliable numeric transcription and evidence verification on image-only pages remain untested. The unresolved document meanings listed above cannot be settled from the supplied sources. The proposed deterministic parser and its handling of unsupported layouts have not been tested. This answer must be updated with observed implementation limitations.
+At this stage, reliable numeric transcription and evidence verification on image-only pages remain untested. The unresolved document meanings listed above cannot be settled from the supplied sources. The deterministic parser passes the supplied text samples and focused geometry/coverage tests, but fragmented headers, wrapping and hybrid image/text tables remain coverage risks. Candidates are not yet independently validated. This answer must be updated with observed implementation limitations.
 
 ### 3. What would you do with three more days?
 
@@ -120,6 +120,8 @@ Reader tests use Node's built-in test runner with tsx:
 ```sh
 npm run test:reader
 npm run verify:reader
+npm run test:parser
+npm run verify:candidates
 ```
 
 The eight tests cover the six samples, page numbering, no-text states, invalid/corrupt input, and synthetic page-local failures. Verification prints actual page states; pass an output directory to save raw text/fragments for inspection:
@@ -128,4 +130,4 @@ The eight tests cover the six samples, page numbering, no-text states, invalid/c
 npm run verify:reader -- /tmp/insta-quote-reader-output
 ```
 
-Business refusal, parsing, API and UI tests remain future work in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Typecheck/build success alone does not prove extraction or evidence correctness.
+The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. Business refusal, final evidence validation, API and UI tests remain future work in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Typecheck/build success alone does not prove extraction or evidence correctness.
