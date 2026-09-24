@@ -1,6 +1,6 @@
 # instaquote-take-home
 
-**Tasks 1–4: shell, contracts, reader, candidate extraction and validation.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload API and results UI remain unimplemented. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
+**Tasks 1–5: extraction service and upload API.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload API is implemented; the frontend remains a placeholder. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
 
 
 ## Overview
@@ -54,7 +54,7 @@ Acceptance means the value is supported by the source. It does not mean the docu
 
 Current direction; the shell, contracts, page reader, candidate parser and validation service are implemented:
 
-- One Next.js + TypeScript app is set up. The planned upload endpoint remains unimplemented; no separate backend or tRPC layer is added.
+- One Next.js + TypeScript app is set up. `POST /api/extract` exposes the existing extraction service; no separate backend or tRPC layer is added.
 
 - Validate candidate structure, evidence and business meaning independently of how candidates are generated.
 - Use arithmetic for internal consistency checks; do not fill missing extracted values.
@@ -100,7 +100,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000 to view the placeholder shell. Document upload and extraction are not available yet; `/api/extract` has no route handler.
+Open http://localhost:3000 to view the placeholder shell. The frontend upload/results flow is not implemented yet; use the API below.
 
 ```sh
 npm run typecheck
@@ -110,13 +110,13 @@ npm start
 
 Dependency versions are pinned in `package.json` and `package-lock.json`.
 
-The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; HTTP integration remains future work.
+The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; Actual HTTP uploads are tested against Next dev and production start.
 
 `npm run typecheck` generates Next.js types before running TypeScript, so it does not require a previous build. `next-env.d.ts` is generated and ignored. Next.js also generated `AGENTS.md` and `CLAUDE.md` with local framework guidance.
 
 ## Tests
 
-Reader tests use Node's built-in test runner with tsx:
+Tests use Node's built-in test runner with tsx:
 
 ```sh
 npm run test:reader
@@ -125,6 +125,7 @@ npm run test:parser
 npm run verify:candidates
 npm run test:validation
 npm run verify:extraction
+npm run test:api
 ```
 
 The eight tests cover the six samples, page numbering, no-text states, invalid/corrupt input, and synthetic page-local failures. Verification prints actual page states; pass an output directory to save raw text/fragments for inspection:
@@ -133,4 +134,17 @@ The eight tests cover the six samples, page numbering, no-text states, invalid/c
 npm run verify:reader -- /tmp/insta-quote-reader-output
 ```
 
-The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. API and UI tests remain future work in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Typecheck/build success alone does not prove extraction or evidence correctness.
+The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. The 20 API tests cover multipart inputs, serialization and safe error mapping. Nine HTTP tests exercise all six samples plus missing/non-PDF/corrupt uploads against a running Next server. UI tests remain future work. Typecheck/build success alone does not prove extraction or evidence correctness.
+
+## Extraction API
+
+`POST /api/extract` accepts `multipart/form-data` with exactly one uploaded PDF in the `file` field. Example with the local server running:
+
+```sh
+curl -sS -F 'file=@data/KBS-10234.pdf;type=application/pdf' http://localhost:3000/api/extract
+API_BASE_URL=http://localhost:3000 npm run test:api:http
+```
+
+HTTP 200 returns `{ items, refusals, issues }` directly, including partial results and documents with only refusals. HTTP 400 returns `{ error: { code: "invalid_upload", message } }` for invalid uploads. Fatal corrupt/encrypted documents return 422 (`unreadable_pdf` / `unsupported_encryption`); reader initialization or unexpected extraction failures return 500 (`processing_failed`) with safe messages.
+
+The Node route checks multipart structure, a nonempty file and a plausible `%PDF-` header within the first 1024 bytes; the PDF reader validates the document. MIME type and filename are hints, so missing/generic MIME does not reject valid PDF bytes. Uploads are held in memory with no added size/page cap for this local assessment. Resource/concurrency limits and hosted-runtime compatibility need assessment before public deployment. Existing text-only, supported-layout and evidence/consistency limitations still apply. HTTP 200 does not imply complete extraction.
