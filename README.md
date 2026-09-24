@@ -1,151 +1,139 @@
-# instaquote-take-home
+# Insta Quote AI — Full Stack Engineer Take-Home
 
-**Tasks 1–6: extraction service, upload API and results page.** The Node service now returns validated items, scoped refusals and source/processing issues for the six samples. Evidence is checked independently before acceptance; arithmetic never fills missing values. The upload page displays items, expandable source evidence, refusals, warnings and partial results. No OCR/VLM or runtime AI is present. See [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md) for actual results and limitations.
-
+**Tech stack:** Next.js · React · TypeScript · Node.js · PDF.js
 
 ## Overview
 
-The task is to extract line items from PDFs without inventing numbers, then show the results and explicit refusals on a small web page. Each extracted number must be traceable to its page and exact source text.
+A small PDF extraction workflow built with Next.js and TypeScript. Upload a PDF to extract supported line items, review their page/source evidence, and see explicit refusals or issues when the document cannot be safely interpreted.
 
-[test.md](test.md) is the authoritative specification. [ANALYSIS.md](ANALYSIS.md) contains the Vietnamese study notes and document inspection. [BASELINE_REVIEW.md](BASELINE_REVIEW.md) records the verified V1 design recommendations, trade-offs and remaining risks.
+The goal is trustworthy output: unsupported or ambiguous data is surfaced rather than guessed. The original assessment brief is included in [test.md](test.md).
 
-## Problem Principles
+## Approach
 
-- Return only source-supported numeric values. Do not calculate missing values and present them as extracted facts.
-- Keep evidence with each item and preserve enough context to identify each field.
-- Explain missing, ambiguous and conflicting information through explicit refusals or warnings.
-- Preserve useful results when a separate field or page cannot be processed.
-- Carry the reason and scope of refusals and technical failures through the API to the UI.
+Version 1 uses PDF.js for page-level text extraction, a deterministic candidate parser, and independent evidence and business validation. One application contains the upload UI and Node API route; no external services or API keys are needed.
 
-## Assessment Requirements
+- Every extracted number must be supported by its original page and source text.
+- Missing values are not calculated and presented as extracted facts.
+- Conflicting claims and arithmetic mismatches are surfaced without replacing printed values.
+- A failure on one page preserves valid results from other pages.
 
-**Part A, about three hours:** a PDF-to-JSON service returning extracted line items with page/source-text evidence and a separate list of refusals with reasons.
+AI coding assistance was used during development. Extraction has no runtime LLM, OCR or VLM.
 
-**Part B, about two hours:** a web page that uploads a document and displays results, evidence and understandable refusals, with useful loading and failure states.
+## Architecture
 
-The stack is open. Matching the team's stack is helpful but optional. AI coding agents are expected; the author must understand and explain the implementation. A few tests must specifically cover refusal rules.
+```text
+Browser upload → POST /api/extract → PDF reader → Candidate parser
+              → Evidence + business validation → ExtractionResult → Results UI
+```
 
-Submission requires a repository with visible commit history and answers to the three README questions below. The deadline is 24 hours after receiving the sample files; expected effort is roughly five hours. A smaller finished submission is preferred.
+The parser produces candidates, not trusted output. Candidates reach the user only after validation. The UI preserves page/context, expandable evidence, plain-language refusal reasons, and separate loading and fatal-error states.
 
-## Sample Document Analysis
+## Result Model
 
-All six PDFs were inspected, including all eight pages of KBS-DR118. Direct text extraction and rendered pages were reviewed using the machine's existing PDFKit tooling. This inspection is separate from any future application support.
+The public contract is defined in [lib/contracts.ts](lib/contracts.ts):
 
-| Document | Main case |
+- `items`: validated line items with page/source evidence. Numeric fields retain normalized and original values; `lineTotal` is optional.
+- `refusals`: data that could not be safely extracted, with a scope and reason, such as a page with no usable text.
+- `issues`: warnings or recoverable processing problems that need attention, such as discrepant pallet counts, total mismatches, or page-local processing failures.
+
+```json
+{
+  "items": [],
+  "refusals": [],
+  "issues": []
+}
+```
+
+The API accepts one PDF in the multipart field `file`. Successful requests return this result directly, including partial results and refusals. Fatal request failures use a separate `{ error: { code, message } }` response: 400 for invalid uploads, 422 for unreadable or unsupported encrypted documents, and 500 for processing failures.
+
+## Sample Behaviour
+
+All six PDFs are included in [data/](data/).
+
+| Sample | Behaviour |
 |---|---|
-| [KBS-10234](data/KBS-10234.pdf) | Text-based happy path: five complete rows; printed total of $2,630.00 matches the line totals. |
-| [KBS-10241](data/KBS-10241.pdf) | Image-only in the text-reading check. Four rows are visible; no extracted text does not mean no items. |
-| [KBS-10255](data/KBS-10255.pdf) | Four rows with quantities, weights and unit prices, but no printed line totals. Only `480g total` explicitly identifies the weight scope. |
-| [KBS-10262](data/KBS-10262.pdf) | Three clear rows; the summary says 14 pallets loaded and the driver says 16 unloaded. The discrepancy is unresolved; neither claim should silently win. |
-| [KBS-10270](data/KBS-10270.pdf) | Printed total is $1,612.90. An analysis-only sum of the four printed line totals is $1,538.20. The difference is unexplained; no freight amount is stated. |
-| [KBS-DR118](data/KBS-DR118.pdf) | Eight pages; page 4 has no usable text layer in the check. Delivery, summary, returns, credit and acceptance contexts must remain distinct. |
+| [KBS-10234](data/KBS-10234.pdf) | 5 validated items; no refusals or issues |
+| [KBS-10241](data/KBS-10241.pdf) | No usable text extracted by the V1 text reader on page 1; explicit refusal instead of empty success |
+| [KBS-10255](data/KBS-10255.pdf) | 4 items; missing line totals remain absent; ambiguous weights flagged |
+| [KBS-10262](data/KBS-10262.pdf) | 3 items; preserves the 14-loaded / 16-unloaded claims in discrepancy evidence |
+| [KBS-10270](data/KBS-10270.pdf) | 4 items; flags the total mismatch and preserves the printed total |
+| [KBS-DR118](data/KBS-DR118.pdf) | 21 items from readable pages; page 4 explicitly refused; page/context retained |
 
-The calculations above are review findings, not application output. Full row data and page references are in ANALYSIS.md. No sample PDF was modified.
+### UI Preview
 
-## Intended Result Contract
+Successful extraction of KBS-10234: five validated items, no refusals or issues, and expandable source evidence for each row.
 
-The types are defined in [lib/contracts.ts](lib/contracts.ts); runtime evidence validation and document aggregation are implemented. `ExtractionResult` has `items`, `refusals` and `issues`. Items carry shared, non-empty evidence and optional source context. Numeric fields use `{ value, raw }`, with a decimal string value and the original source token. `lineTotal` is optional. Refusals explain what could not be extracted; issues distinguish source warnings from recoverable page errors. Fatal request failures use the separate `ApiError` type. Optional absent fields do not automatically generate refusals.
+![KBS-10234 upload and results UI showing five extracted items with source evidence controls](data/happy-case.png)
 
-TypeScript cannot prove that a quote supports a number, that a page exists, or that a decimal string is valid. The validation layer checks source associations and numeric tokens at runtime; the type declarations alone do not enforce them.
+## Run Locally
 
-Acceptance means the value is supported by the source. It does not mean the document is internally consistent: a printed total may be preserved with a mismatch warning. A partial result must identify the unread or unresolved portion.
-
-## Key Engineering Decisions
-
-Current direction; the shell, contracts, page reader, candidate parser and validation service are implemented:
-
-- One Next.js + TypeScript app is set up. `POST /api/extract` exposes the existing extraction service; no separate backend or tRPC layer is added.
-
-- Validate candidate structure, evidence and business meaning independently of how candidates are generated.
-- Use arithmetic for internal consistency checks; do not fill missing extracted values.
-- Keep page and document context, especially for returns and credits. Do not infer signs, net quantities or duplicate relationships.
-- Use page-by-page text reading and deterministic extraction for supported layouts in V1. Unreadable pages and unsupported table content must not silently become empty success. The reader uses pdfjs-dist 6.3.289; candidate parsing reports unsupported tables/rows internally; validation maps these diagnostics to scoped refusals.
-- Defer OCR/VLM to a later version unless the core submission is complete and the fallback can be verified. No runtime LLM is planned for V1.
-
-## Testing Focus
-
-Tests cover refusing inferred totals, surfacing conflicting claims while preserving unrelated items, validating evidence and containing page failures. Component tests and browser checks verify that refusal reasons survive the service/API/UI path. A clean document should also be accepted without unnecessary refusal.
-
-## Known Limitations / Uncertainties
-
-The reader returns `no_usable_text` for KBS-10241 and page 4 of KBS-DR118, preserving the other readable pages. The page displays these scoped refusals alongside any readable items, with a visible partial-result indication. A page containing some text is not proof that all of its content or tables were read. Visual inspection of the image pages does not establish working OCR. The specification does not define a complete field schema or a verification standard for OCR transcriptions.
-
-The documents do not resolve the ambiguous weight scopes, pallet discrepancy, total mismatch or accounting relationships among KBS-DR118's later pages. Its “Signed Acceptance” heading alone is not evidence of an actual signature. These limits should remain explicit rather than being filled with assumptions.
-
-## Required Assessment Questions
-
-### 1. What was the hardest decision and why did you choose that approach?
-
-**TBD after implementation.** The current recommendation limits V1 to text reading and explicit page refusals. The final answer should explain whether this trade-off held up during implementation and verification.
-
-### 2. Where are you not confident?
-
-At this stage, reliable numeric transcription and evidence verification on image-only pages remain untested. The unresolved document meanings listed above cannot be settled from the supplied sources. The deterministic parser passes the supplied text samples and focused geometry/coverage tests, but fragmented headers, wrapping and hybrid image/text tables remain coverage risks. Candidates are independently checked against source fragments before acceptance, within those supported layouts. This answer must be updated with observed implementation limitations.
-
-### 3. What would you do with three more days?
-
-Preliminary priorities, to revisit after implementation:
-
-- Evaluate image reading on varied scans and add page-region evidence for review.
-- Expand negative tests for fabricated evidence, damaged pages, prompt injection and lost API/UI error details.
-- Refine document-context rules using confirmed delivery/returns/credit requirements.
-- Add stage timings and issue metrics to distinguish extraction limitations from operational failures.
-
-## Running the Project
-
-Use Node.js 22.13 or newer (verified locally with Node.js 22.14.0) and npm. The minimum was raised for pdfjs-dist 6.3.289.
+Requires **Node.js >= 22.13.0** and npm. Verified with Node 22.14.0 and npm 11.2.0.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open http://localhost:3000, choose a PDF, then select **Extract items**. The form is disabled while reading and validating. Review the result summary, grouped page/context tables, separate Refusals and Issues sections, and **View source evidence** details. Selecting a new file clears the old result; fatal upload errors display the API reason.
+Open **http://localhost:3000**, choose a PDF and click **Extract items**. Expand **View source evidence** to review a value's origin.
+
+For production mode, stop the dev server and run:
 
 ```sh
-npm run typecheck
 npm run build
 npm start
 ```
 
-Dependency versions are pinned in `package.json` and `package-lock.json`.
-
-The project uses Next.js 16.3.6, React 19.3.0 and TypeScript 7.0.2. Reader execution was also checked in Next.js development and production Node runtimes using a temporary probe, removed after verification. `next.config.ts` externalizes pdfjs-dist to preserve worker resolution. The current reader-to-validation service is checked separately by the extraction verification command; actual HTTP uploads are tested against Next dev and production start.
-
-`npm run typecheck` generates Next.js types before running TypeScript, so it does not require a previous build. `next-env.d.ts` is generated and ignored. Next.js also generated `AGENTS.md` and `CLAUDE.md` with local framework guidance.
+No environment file or database is required.
 
 ## Tests
 
-Tests use Node's built-in test runner with tsx:
-
 ```sh
 npm run test:reader
-npm run verify:reader
 npm run test:parser
-npm run verify:candidates
 npm run test:validation
-npm run verify:extraction
 npm run test:api
 npm run test:ui
+npm run typecheck
+npm run build
 ```
 
-The eight tests cover the six samples, page numbering, no-text states, invalid/corrupt input, and synthetic page-local failures. Verification prints actual page states; pass an output directory to save raw text/fragments for inspection:
+Tests focus on evidence validation, refusal reasons, partial failures, and preventing unsupported numeric inference. All five suites, typecheck and build passed in a clean dependency installation.
+
+With a local server running, run the HTTP tests, including uploads of all six samples:
 
 ```sh
-npm run verify:reader -- /tmp/insta-quote-reader-output
-```
-
-The 13 parser tests cover source-backed row/claim mapping on all six samples and synthetic geometry, blank cells, unreadable states and coverage diagnostics. The 30 validation tests cover source corruption, refusal/business rules, exact arithmetic and partial failures. The 20 API tests cover multipart inputs, serialization and safe error mapping. Nine HTTP tests exercise all six samples plus missing/non-PDF/corrupt uploads against a running Next server. The 18 UI tests cover rendering, evidence, partial/error states and transport handling. All six PDFs were uploaded through the production browser UI; loading/disabled behavior, fatal errors and a narrow viewport were checked. See [UI_ACCEPTANCE.md](UI_ACCEPTANCE.md). Typecheck/build success alone does not prove extraction or evidence correctness.
-
-## Extraction API
-
-`POST /api/extract` accepts `multipart/form-data` with exactly one uploaded PDF in the `file` field. Example with the local server running:
-
-```sh
-curl -sS -F 'file=@data/KBS-10234.pdf;type=application/pdf' http://localhost:3000/api/extract
 API_BASE_URL=http://localhost:3000 npm run test:api:http
 ```
 
-HTTP 200 returns `{ items, refusals, issues }` directly, including partial results and documents with only refusals. HTTP 400 returns `{ error: { code: "invalid_upload", message } }` for invalid uploads. Fatal corrupt/encrypted documents return 422 (`unreadable_pdf` / `unsupported_encryption`); reader initialization or unexpected extraction failures return 500 (`processing_failed`) with safe messages.
+To inspect the final extraction results for all samples:
 
-The Node route checks multipart structure, a nonempty file and a plausible `%PDF-` header within the first 1024 bytes; the PDF reader validates the document. MIME type and filename are hints, so missing/generic MIME does not reject valid PDF bytes. Uploads are held in memory with no added size/page cap for this local assessment. Resource/concurrency limits and hosted-runtime compatibility need assessment before public deployment. Existing text-only, supported-layout and evidence/consistency limitations still apply. HTTP 200 does not imply complete extraction.
+```sh
+npm run verify:extraction
+```
+
+The six samples were also checked through the production upload UI in Chrome, including evidence expansion, error states and a narrow viewport.
+
+## Trade-offs and Limitations
+
+- V1 reads PDF text layers only. Pages without usable text are refused; empty text alone does not establish whether a page is blank or scanned.
+- The parser supports the supplied table families. Unusual fragment ordering, wrapped rows and hybrid image/text pages may be unsupported or incompletely detected. Evidence checks depend on text-layer and geometry fidelity.
+- Total consistency checks are intentionally conservative and run only when the relevant rows and printed total can be validated within the same supported scope. Unsupported reconciliation scopes are explicitly reported as not checked.
+- Runtime behaviour was verified locally. Uploads are held in memory without application size/page/concurrency limits; hosted/serverless behaviour for larger workloads remains unverified.
+
+## Required Questions
+
+### 1. What was the hardest decision and why did you choose that approach?
+
+The hardest decision was whether to add OCR or a vision model for image-only pages. The samples made the limitation of a text-only approach clear: one entire sample and page 4 of the mixed document cannot be extracted by the V1 text-layer reader.
+
+I chose explicit refusals because the assessment prioritises trustworthy numbers over maximum coverage. Given the five-hour scope, I prioritised completing and validating the full upload-to-evidence flow. Adding OCR/VLM would introduce another source of numeric transcription errors that would also need reliable verification. Separating reading from validation leaves room for an image reader while retaining the evidence and refusal rules.
+
+### 2. Where are you not confident?
+
+My main uncertainty is layout coverage beyond the supplied samples. Unusual fragment ordering, wrapped rows and hybrid pages may require additional parsing rules or an image-based fallback. In particular, readable text does not guarantee every region of a page was captured. I also have not verified hosted/serverless memory and concurrency behaviour for larger uploads.
+
+### 3. What would you do with three more days?
+
+First, trial an OCR/VLM fallback on image-only pages, with numeric transcription tests and the same evidence/business validation pipeline. Uncertain results would remain refusals.
+
+Next, add page-region evidence for visual review and expand adversarial tests for damaged, hybrid and less structured documents. Finally, test deployment limits, introduce upload/concurrency bounds, and add focused diagnostics for processing time and extraction failures.

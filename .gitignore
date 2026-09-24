@@ -9,16 +9,8 @@ coverage/
 .DS_Store
 npm-debug.log*
 
-
+# Local engineering notes and reference material; not needed to run the project.
 Knowledge/
-ANALYSIS.md
-BASELINE_REVIEW.md
-IMPLEMENTATION_PLAN.md
-READER_SPIKE.md
+MD/
 AGENTS.md
 CLAUDE.md
-CANDIDATE_EXTRACTION.md
-VALIDATION_RESULTS.md
-.env
-.env.*
-UI_ACCEPTANCE.md
